@@ -22,6 +22,7 @@ index.html          页面外壳
 css/style.css       少量样式
 src/slime.js        全部逻辑：200² 高度场、斜俯视射线求交着色器、猫爪/装饰/拉丝/泡泡、WebAudio 音效
 test/render-overlay.js  离线测试：node 里模拟拉丝并画出叠加层（需 @napi-rs/canvas）
+docs/               小海实物参考图
 ```
 
 ## 版本
@@ -29,5 +30,8 @@ test/render-overlay.js  离线测试：node 里模拟拉丝并画出叠加层（
 - v2 毛茸茸猫爪、海豚重画、拉丝/对折/泡泡/泡沫珠/亮片
 - v3 斜俯视 52° 镜头，盒壁透视，3D 拉丝
 - v3.1 拉丝改成有体积的软丝：平滑曲线、分层透光、顺丝闪粉、根部鼓包
+
+## 灵感：小海
+<img src="docs/ref-1.jpeg" width="45%"> <img src="docs/ref-2.jpeg" width="45%">
 
 设计 & 灵感：绮思 ｜ 代码：澜（Hark）
