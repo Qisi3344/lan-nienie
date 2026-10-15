@@ -1,0 +1,6 @@
+html,body{margin:0;height:100%;overflow:hidden;background:#EEEEF1;overscroll-behavior:none;touch-action:none}
+#app{position:fixed;inset:0}
+#app .slm-title small{color:#2f706d}
+#app .slm-btn{min-width:44px;min-height:44px;color:#2f706d}
+#app .slm-hint{color:#2f706d}
+#app>div[style]{color:#b02a2a!important}
