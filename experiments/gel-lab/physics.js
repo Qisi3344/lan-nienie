@@ -13,25 +13,27 @@
   const hypot=Math.hypot;
   class Gel {
     constructor(options={}){
-      this.width=640;this.height=520;
-      this.left=69;this.right=571;this.floor=448;
-      this.radius=23;this.particles=[];this.bonds=new Map();
+      this.width=640;this.height=430;
+      this.left=56;this.right=584;this.floor=393;
+      this.radius=27;this.particles=[];this.bonds=new Map();
       this.grabs=new Map();this.stepCount=0;
-      this.gravity=0.18;this.viscosity=0.18;this.elasticity=0.28;
-      this.plasticity=0.006;this.restDensity=5.0;
+      this.gravity=0.14;this.viscosity=0.26;this.elasticity=0.34;
+      this.plasticity=0.013;this.restDensity=5.2;
       this.reset();
     }
     reset(){
       this.particles=[];this.bonds.clear();this.grabs.clear();this.stepCount=0;
-      // Slightly irregular dense arrangement, independent of display resolution.
-      const rows=11.4,columns=11.4;
+      // A full dish of material, not an isolated ellipse in an empty tray.
+      // 35 x 12 moderately-spaced particles form a broad, deep gel body.
+      // The rounded ends are in particle geometry itself (not in the drawing).
+      const dx=13.45,dy=11.8;
       let i=0;
-      for(let y=0;y<11;y++)for(let x=0;x<27;x++){
-        const px=320+(x-13)*columns+(y%2)*columns*0.5;
-        const py=350+(y-5)*rows;
-        const nx=(px-320)/155,ny=(py-350)/66;
-        if(nx*nx+ny*ny>1)continue;
-        const wobble=Math.sin(i*12.9898)*0.35;
+      for(let y=0;y<12;y++)for(let x=0;x<35;x++){
+        const px=320+(x-17)*dx+(y%2)*dx*0.5;
+        const py=239+y*dy;
+        const taper=8+16*Math.pow((y-5.5)/6,2);
+        if(Math.abs(px-320)>237-taper)continue;
+        const wobble=Math.sin(i*12.9898)*0.36;
         this.particles.push({x:px+wobble,y:py-wobble,px:px+wobble,py:py-wobble,
           vx:0,vy:0,id:i++});
       }
@@ -73,7 +75,6 @@
       }
     }
     _springs(pairs,dt){
-      const added=new Set();
       // Springs form when neighbors touch; stretching changes rest length (plastic flow).
       // They can rupture and later reform; not a permanent rubber mesh.
       const maxSprings=this.particles.length*12;
@@ -82,12 +83,11 @@
         if(!this.bonds.has(key)&&e.q<0.79&&this.bonds.size<maxSprings){
           this.bonds.set(key,{i:e.i,j:e.j,rest:e.r});
         }
-        added.add(key);
       }
       for(const [key,bond] of this.bonds){
         const a=this.particles[bond.i],b=this.particles[bond.j];
         const dx=b.x-a.x,dy=b.y-a.y,len=hypot(dx,dy)||0.0001;
-        if(len>this.radius*2.75){this.bonds.delete(key);continue;}
+        if(len>this.radius*2.05){this.bonds.delete(key);continue;}
         const yieldPoint=0.2*bond.rest,stretch=len-bond.rest;
         if(Math.abs(stretch)>yieldPoint){
           bond.rest+=clamp(stretch-Math.sign(stretch)*yieldPoint,-0.8,0.8)*this.plasticity*dt;
@@ -118,14 +118,14 @@
     }
     beginGrab(id,x,y){
       const nearest=this.particles.map((p,i)=>({i,r:hypot(p.x-x,p.y-y)}))
-        .filter(e=>e.r<32).sort((a,b)=>a.r-b.r).slice(0,9);
-      if(nearest.length===0)return false;
-      this.grabs.set(id,{x,y,indices:nearest.map(e=>({i:e.i,w:clamp(1-e.r/42,0.24,1)}))});
+        .filter(e=>e.r<49).sort((a,b)=>a.r-b.r).slice(0,25);
+      if(nearest.length===0||nearest[0].r>34)return false;
+      this.grabs.set(id,{x,y,indices:nearest.map(e=>({i:e.i,w:clamp(1-e.r/58,0.15,1)}))});
       return true;
     }
     moveGrab(id,x,y){
       const p=this.grabs.get(id);
-      if(p){p.x=clamp(x,30,610);p.y=clamp(y,25,460);}
+      if(p){p.x=clamp(x,35,605);p.y=clamp(y,25,this.floor-7);}
     }
     endGrab(id){this.grabs.delete(id);}
     _grabConstraints(dt){
@@ -134,7 +134,7 @@
           const p=this.particles[e.i];
           let dx=g.x-p.x,dy=g.y-p.y,dist=hypot(dx,dy);
           if(dist<1e-4)continue;
-          const travel=Math.min(7.5*dt,dist*0.4*e.w*dt);
+          const travel=Math.min(8.2*dt,dist*0.42*e.w*dt);
           p.x+=dx/dist*travel;p.y+=dy/dist*travel;
         }
       }
