@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const {Gel}=require('../experiments/gel-lab/physics.js');
 const gel=new Gel();
 const ids=gel.particles.map(p=>p.id),count=ids.length;
-assert(count>150&&count<300,'expected bounded mobile particle count');
+assert(count>320&&count<480,'expected bounded mobile particle count');
 for(let i=0;i<120;i++)gel.step(1/60);
 const pulled=gel.particles.reduce((a,b)=>b.y<a.y?b:a);
 const baseY=pulled.y;
