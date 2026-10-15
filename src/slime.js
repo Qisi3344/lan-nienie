@@ -17,6 +17,8 @@
   let ringIdx, ringW;
   let L = 400, cx = 200, cy = 200, W = 400, H = 400, dpr = 1;
   let gl, glc, ov, ctx, prog, texN, texG, nData, uni = {};
+  const pullA=new Float32Array(24),pullB=new Float32Array(24),pullBounds=new Float32Array(8),pullActive=new Float32Array(2);
+  const returningGel=[];
   let paws = new Map();
   let decos = [];
   let muted = false;
@@ -439,10 +441,59 @@
   const VS = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
   const FS = `precision highp float;
 uniform sampler2D uN, uG; uniform vec2 uRes, uC; uniform float uL, uR, uT, uFoc, uHZ; uniform vec3 uCam, uF, uRt, uUp;
+uniform vec4 uPullA[6],uPullB[6],uPullBounds[2]; uniform vec2 uPullActive;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
 float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*noise(p);p*=2.03;a*=.5;}return s;}
+
+float gelUnion(float a,float b,float k){float f=max(k-abs(a-b),0.)/k;return min(a,b)-f*f*k*0.25;}
+float tubeA(vec3 x){
+ float d=9.;
+ for(int i=0;i<5;i++){
+  vec4 a=uPullA[i],b=uPullA[i+1];vec3 v=b.xyz-a.xyz;
+  float t=clamp(dot(x-a.xyz,v)/max(dot(v,v),0.000001),0.,1.);
+  d=gelUnion(d,length(x-a.xyz-v*t)-mix(a.w,b.w,t),0.006);
+ }
+ return d;
+}
+float tubeB(vec3 x){
+ float d=9.;
+ for(int i=0;i<5;i++){
+  vec4 a=uPullB[i],b=uPullB[i+1];vec3 v=b.xyz-a.xyz;
+  float t=clamp(dot(x-a.xyz,v)/max(dot(v,v),0.000001),0.,1.);
+  d=gelUnion(d,length(x-a.xyz-v*t)-mix(a.w,b.w,t),0.006);
+ }
+ return d;
+}
+float unifiedGel(vec3 p,int hand){
+ float tube=hand==0?tubeA(p):tubeB(p);
+ float surface=(texture2D(uN,p.xy+0.5).b-0.5)*4.*uHZ;
+ float basin=max(p.z-surface,length(p.xy)-uR);
+ return gelUnion(tube,basin,0.019);
+}
+float rayGel(vec3 eye,vec3 ray,vec4 ball,int hand,float limit){
+ vec3 oc=eye-ball.xyz;
+ float b=dot(oc,ray),c=dot(oc,oc)-ball.w*ball.w;
+ float disc=b*b-c;if(disc<=0.)return -1.;
+ float d=sqrt(disc),t=max(0.,-b-d),far=-b+d;
+ if(t>=limit)return -1.;
+ for(int i=0;i<42;i++){
+  if(t>far || t>=limit)break;
+  float gap=unifiedGel(eye+ray*t,hand);
+  if(gap<0.0012)return t;
+  t+=max(0.0016,gap*0.82);
+ }
+ return -1.;
+}
+vec3 gelNorm(vec3 p,int hand){
+ float e=0.0018;
+ return normalize(vec3(
+  unifiedGel(p+vec3(e,0.,0.),hand)-unifiedGel(p-vec3(e,0.,0.),hand),
+  unifiedGel(p+vec3(0.,e,0.),hand)-unifiedGel(p-vec3(0.,e,0.),hand),
+  unifiedGel(p+vec3(0.,0.,e),hand)-unifiedGel(p-vec3(0.,0.,e),hand)
+ ));
+}
 void main(){
  vec2 fc=vec2(gl_FragCoord.x,uRes.y-gl_FragCoord.y);
  vec3 dir=normalize(uF*uFoc+uRt*(fc.x-uC.x)-uUp*(fc.y-uC.y));
@@ -503,6 +554,25 @@ void main(){
   c=mix(c,vec3(0.97,1.,1.),clamp(fr*0.6+(1.-n.z)*0.5,0.,0.45));
   col=c;
  }
+
+ // Shared signed-distance surface: gel column + basin are a single volume.
+ float hit=-1.;int hand=0;
+ if(uPullActive.x>0.5)hit=rayGel(uCam,dir,uPullBounds[0],0,ts);
+ if(uPullActive.y>0.5){
+  float other=rayGel(uCam,dir,uPullBounds[1],1,ts);
+  if(other>0.&&(hit<0.||other<hit)){hit=other;hand=1;}
+ }
+ if(hit>0.){
+  vec3 pos=uCam+dir*hit,n=gelNorm(pos,hand);
+  vec2 uv=clamp(pos.xy+0.5,vec2(0.),vec2(1.));
+  vec3 glitter=texture2D(uG,uv-n.xy*0.032).rgb;
+  vec3 lightDir=normalize(vec3(-0.45,-0.55,0.72));
+  float lit=0.72+0.32*max(dot(n,lightDir),0.);
+  float spec=pow(max(dot(n,normalize(lightDir-dir)),0.),92.)*1.05;
+  float fres=pow(1.-max(dot(n,-dir),0.),3.);
+  vec3 gel=mix(glitter*vec3(0.52,0.91,0.89),vec3(0.70,0.98,0.94),0.2+0.28*max(n.z,0.));
+  col=gel*lit+spec+fres*vec3(0.33,0.57,0.56);
+ }
  gl_FragColor=vec4(col,1.);
 }`;
 
@@ -516,7 +586,7 @@ void main(){
     const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
     const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ['uN', 'uG', 'uRes', 'uC', 'uL', 'uR', 'uT', 'uFoc', 'uHZ', 'uCam', 'uF', 'uRt', 'uUp']) uni[n] = gl.getUniformLocation(prog, n);
+    for (const n of ['uN', 'uG', 'uRes', 'uC', 'uL', 'uR', 'uT', 'uFoc', 'uHZ', 'uCam', 'uF', 'uRt', 'uUp','uPullA[0]','uPullB[0]','uPullBounds[0]','uPullActive']) uni[n] = gl.getUniformLocation(prog, n);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     texN = gl.createTexture(); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texN);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -539,6 +609,7 @@ void main(){
     gl.uniform1f(uni.uL, L * dpr); gl.uniform1f(uni.uR, R); gl.uniform1f(uni.uT, t);
     gl.uniform1f(uni.uFoc, CAM.foc * dpr); gl.uniform1f(uni.uHZ, HZ);
     gl.uniform3fv(uni.uCam, CAM.C); gl.uniform3fv(uni.uF, CAM.f); gl.uniform3fv(uni.uRt, [1, 0, 0]); gl.uniform3fv(uni.uUp, CAM.up);
+    uploadGel();
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 
@@ -609,7 +680,76 @@ void main(){
     }
   }
 
-  /* ---------------- 拉丝 ---------------- */
+
+  /* Shared-volume extraction. Height integral in the basin decreases
+     by exactly the world volume placed in the raised gel. */
+  function radiusAt(t,len){
+    const shrink=clamp(Math.sqrt(0.13/Math.max(len,0.13)),0.52,1);
+    return S*(0.21*shrink*(1-0.26*Math.sin(Math.PI*t))+
+      0.37*Math.exp(-9*t)+0.20*Math.exp(-9*(1-t)));
+  }
+  function liftedVolume(g){
+    if(g.len<=0)return 0;
+    let area=0;
+    for(let i=0;i<16;i++){const t=(i+0.5)/16,r=radiusAt(t,g.len);area+=r*r;}
+    return Math.PI*g.len*area/16;
+  }
+  function transferVolume(g,next){
+    const delta=next-(g.volume||0);
+    if(Math.abs(delta)<1e-10){g.volume=next;return;}
+    let total=0;
+    const radius=S*2.15;
+    forDisk(g.au,g.av,radius,(q,d)=>{total+=Math.exp(-2.7*d*d);});
+    if(total){
+      const correction=delta/(HZ*total/(N*N));
+      forDisk(g.au,g.av,radius,(q,d)=>{h[q]-=Math.exp(-2.7*d*d)*correction;});
+    }
+    g.volume=next;
+  }
+  function returnGrab(g){returningGel.push(g);}
+  function stepReturning(dt){
+    for(let k=returningGel.length-1;k>=0;k--){
+      const g=returningGel[k],a=Math.min(1,dt*11);
+      g.az=hAt(g.au,g.av)*HZ;
+      for(const n of g.nodes){
+        n.u+=(g.au-n.u)*a;n.v+=(g.av-n.v)*a;n.z+=(g.az-n.z)*a;
+      }
+      const top=g.nodes[NODES-1];
+      g.len=Math.hypot(top.u-g.au,top.v-g.av,top.z-g.az);
+      transferVolume(g,liftedVolume(g));
+      if(g.len<0.004){
+        transferVolume(g,0);
+        bump(g.au,g.av,S*0.45,0.06);
+        returningGel.splice(k,1);
+      }
+    }
+  }
+  function uploadGel(){
+    pullA.fill(0);pullB.fill(0);pullBounds.fill(0);pullActive.fill(0);
+    const active=[...paws.values()].filter(p=>p.grab).map(p=>p.grab);
+    for(const g of returningGel){if(active.length>=2)break;active.push(g);}
+    const ids=[0,2,5,8,11,NODES-1];
+    for(let hand=0;hand<Math.min(2,active.length);hand++){
+      const g=active[hand],v=hand===0?pullA:pullB;
+      for(let j=0;j<6;j++){
+        const node=g.nodes[ids[j]],i=j*4;
+        v[i]=node.u-0.5;v[i+1]=node.v-0.5;v[i+2]=node.z;
+        v[i+3]=radiusAt(ids[j]/(NODES-1),g.len);
+      }
+      const b=g.nodes[0],top=g.nodes[NODES-1],i=hand*4;
+      pullBounds[i]=(b.u+top.u)*0.5-0.5;
+      pullBounds[i+1]=(b.v+top.v)*0.5-0.5;
+      pullBounds[i+2]=(b.z+top.z)*0.5;
+      pullBounds[i+3]=Math.hypot(top.u-b.u,top.v-b.v,top.z-b.z)*0.58+S*1.15;
+      pullActive[hand]=1;
+    }
+    gl.uniform4fv(uni['uPullA[0]'],pullA);
+    gl.uniform4fv(uni['uPullB[0]'],pullB);
+    gl.uniform4fv(uni['uPullBounds[0]'],pullBounds);
+    gl.uniform2fv(uni.uPullActive,pullActive);
+  }
+
+  /* ---------------- Grab centerline, now part of the 3D material ---------------- */
   let recoils = [];
   const NODES = 14;
   function startGrab(p) {
@@ -617,7 +757,7 @@ void main(){
     const z0 = hAt(p.u, p.v) * HZ;
     for (let i = 0; i < NODES; i++) nodes.push({ u: p.u, v: p.v, z: z0, vu: 0, vv: 0, vz: 0 });
     const [ax, ay] = toPx(p.u, p.v);
-    p.grab = { au: p.u, av: p.v, az: z0, ax, ay, nodes, len: 0 }; p.z = z0;
+    p.grab = { au: p.u, av: p.v, az: z0, ax, ay, nodes, len: 0, volume: 0 }; p.z = z0;
     kyu();
   }
   function strandW(t, len) {
@@ -645,7 +785,9 @@ void main(){
       n.vu += ((tu - n.u) * kk - n.vu * 9) * dt; n.vv += ((tv - n.v) * kk - n.vv * 9) * dt; n.vz += ((tz - n.z) * kk * 0.6 - n.vz * 7) * dt;
       n.u += n.vu * dt; n.v += n.vv * dt; n.z = Math.max(az * 0.5, n.z + n.vz * dt);
     }
-    raiseTo(ax, ay, S * 0.55, 0.45 + len * 2.2, 0.25);
+    transferVolume(g,liftedVolume(g));
+    g.az=hAt(ax,ay)*HZ;
+    ns[0].z=g.az;
     stretchSound(Math.abs(dl) / Math.max(dt, 1e-3), len);
     aimPaw(p, p.sx);
     if (len > 0.4) snap(p);
@@ -653,14 +795,14 @@ void main(){
   function snap(p) {
     const g = p.grab, len = g.len;
     const mid = g.nodes[NODES >> 1];
-    recoils.push({ fromU: mid.u, fromV: mid.v, fromZ: mid.z, toU: g.au, toV: g.av, toZ: g.az, t: 0, dur: 0.24, len, end: 'anchor' });
-    recoils.push({ fromU: mid.u, fromV: mid.v, fromZ: mid.z, toU: p.u, toV: p.v, toZ: p.z, t: 0, dur: 0.2, len, end: 'paw', paw: p });
+    // Physical rupture: detached droplet stays in paw, body flows back.
+    returnGrab(g);
     p.grab = null; p.lifted = true; p.blob = true;
     snapSound();
   }
   function retract(p) {
     const g = p.grab;
-    recoils.push({ fromU: p.u, fromV: p.v, fromZ: p.z, toU: g.au, toV: g.av, toZ: g.az, t: 0, dur: 0.28, len: g.len, end: 'anchor' });
+    returnGrab(g);
     p.grab = null;
     suck();
   }
@@ -954,7 +1096,7 @@ void main(){
     ctx.clearRect(0, 0, W, H);
     drawBubbles(t);
     drawDecos();
-    drawStrands();
+    // The gel column is inside the WebGL material, not drawn as a Canvas sprite.
     for (const p of paws.values()) drawPaw(p);
   }
 
@@ -1131,7 +1273,7 @@ void main(){
     for (const p of paws.values()) stamp(p);
     checkFold();
     updateBubbles(dt);
-    updateRecoils(dt);
+    stepReturning(dt);
     updateDecos(dt);
     if (![...paws.values()].some(p => p.grab)) dragSound(speed);
   }
@@ -1211,6 +1353,7 @@ void main(){
   }
 
   window.Slime = { init, _test: { initField, stamp, diffuse, smear, get h() { return h; }, N, S, R,
+    radiusAt, liftedVolume, transferVolume, get returningGel(){return returningGel;},
     makePawSprite, makeDecos, step, initPaws() { pawSpr = makePawSprite(false); pawSprC = makePawSprite(true); },
     debugDraw(c2d, w, hh) { ctx = c2d; W = w; H = hh; dpr = 1; L = Math.min(W * 0.95, H * 0.66) / (2 * R + 0.05); cx = W / 2; cy = H * 0.5; CAM.foc = L * CD; drawOverlay(0); }, proj: (...a) => proj(...a), unproj: (...a) => unproj(...a), get decos() { return decos; }, startGrab, updateGrab, fold, addBubble, updateBubbles, get bubbles() { return bubbles; }, paws } };
 })();
