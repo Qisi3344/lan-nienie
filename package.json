@@ -6,7 +6,10 @@
   "scripts": {
     "check": "node --check src/slime.js",
     "test": "node test/render-overlay.js 40",
-    "serve": "npx serve ."
+    "serve": "npx serve .",
+    "test:gel": "node test/gel-lab.cjs"
   },
-  "devDependencies": { "@napi-rs/canvas": "^0.1.0" }
+  "devDependencies": {
+    "@napi-rs/canvas": "^0.1.0"
+  }
 }

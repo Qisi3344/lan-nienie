@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>小海 · 黏弹性物理实验台</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#eaf6f3;color:#386e72;font-family:ui-rounded,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+body{padding:22px 12px 50px;background:radial-gradient(ellipse at 50% 0%,#fcffff,#e4f3f0 65%,#d8ece8)}
+main{width:min(780px,100%);margin:0 auto}header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 5px 12px}
+h1{margin:0;font-size:clamp(21px,5vw,30px);font-weight:750;letter-spacing:.04em;color:#33878e}
+small,.sub{font-size:12px;color:#769fa1}h1 span{font-size:20px}
+.pill{font-size:11px;border:1px solid #aadcd6;color:#408d86;padding:6px 10px;border-radius:20px;background:#f7ffff}
+.stage{border:1px solid #c7e7e3;border-radius:24px;overflow:hidden;background:white;box-shadow:0 15px 55px #427d8030;position:relative}
+canvas{display:block;width:100%;aspect-ratio:640/430;touch-action:none;cursor:grab;user-select:none}
+canvas:active{cursor:grabbing}.overlay{position:absolute;left:14px;bottom:13px;color:#4c9692;font-size:11px;background:#f8ffffb9;padding:7px 10px;border-radius:12px;pointer-events:none}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 1px}
+.control{padding:13px 16px;background:#ffffffac;border:1px solid #d7eeeb;border-radius:16px}
+.control label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:7px}
+input[type=range]{width:100%;accent-color:#39b2a5;cursor:pointer}
+.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:2px}
+button{background:#4ca9a6;border:0;color:white;font-weight:700;border-radius:14px;padding:11px 17px;font-size:13px;cursor:pointer}
+button.alt{background:#e0f1ee;color:#448e8b}button:active{transform:scale(.97)}
+.help{line-height:1.8;font-size:13px;color:#659394;margin:13px 3px}.help strong{color:#397e81}
+@media(max-width:500px){body{padding:12px 7px 35px}.stage{border-radius:15px}.controls{gap:7px}.control{padding:11px 8px}}
+</style></head><body>
+<main>
+<header><div><h1>小海 <span>✦</span> 真正的史莱姆</h1><div class="sub">真正的材料粒子 · 黏性 · 弹性 · 连接 · 断裂 · 回流</div></div><div class="pill">2D 剖面 · 研发实验</div></header>
+<div class="stage"><canvas id="gel" width="640" height="430" aria-label="可以按压与提起的物理史莱姆"></canvas><div class="overlay"><span id="status">初始化中…</span></div></div>
+<div class="controls">
+ <div class="control"><label for="visc">黏稠度 <output id="viscVal">26%</output></label><input id="visc" type="range" min="0" max="60" value="26"></div>
+ <div class="control"><label for="elastic">回弹度 <output id="elasticVal">34%</output></label><input id="elastic" type="range" min="2" max="75" value="34"></div>
+</div>
+<div class="actions"><button id="reset">↺ 重新捏一团</button><button class="alt" id="dots">◎ 显示/隐藏材料粒子</button></div>
+<p class="help">用鼠标或手指<strong>按住小海本体</strong>，向上提、向左右揉、松开，观察同一群粒子被拉动后回流。慢慢拉与快速拉可以对比。<br>现在这团胶体<strong>是真正参与物理运算的材料粒子，不是额外画的拉丝</strong>。当前版本验证二维形变，不是已经完成的 3D 正式小海；海豚、猫爪和立体透明盒将等物理验收后再集成。</p>
+</main>
+<script src="./physics.js"></script><script src="./view.js"></script>
+</body></html>
