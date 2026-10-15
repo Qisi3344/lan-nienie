@@ -26,10 +26,10 @@
       // Slightly irregular dense arrangement, independent of display resolution.
       const rows=11.4,columns=11.4;
       let i=0;
-      for(let y=0;y<13;y++)for(let x=0;x<31;x++){
-        const px=320+(x-15)*columns+(y%2)*columns*0.5;
-        const py=350+(y-6)*rows;
-        const nx=(px-320)/179,ny=(py-350)/78;
+      for(let y=0;y<11;y++)for(let x=0;x<27;x++){
+        const px=320+(x-13)*columns+(y%2)*columns*0.5;
+        const py=350+(y-5)*rows;
+        const nx=(px-320)/155,ny=(py-350)/66;
         if(nx*nx+ny*ny>1)continue;
         const wobble=Math.sin(i*12.9898)*0.35;
         this.particles.push({x:px+wobble,y:py-wobble,px:px+wobble,py:py-wobble,
@@ -168,7 +168,7 @@
     }
     step(dt=1/60){
       const fixed=Math.min(1/30,Math.max(0,dt))*60;
-      const sub=3,frame=fixed/sub;
+      const sub=2,frame=fixed/sub;
       for(let k=0;k<sub;k++)this._step(frame);
     }
     metrics(){
