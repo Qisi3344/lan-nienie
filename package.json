@@ -5,8 +5,11 @@
   "description": "小海捏捏：薄荷蓝透明史莱姆 + 猫爪揉捏的手机小玩具",
   "scripts": {
     "check": "node --check src/slime.js",
-    "test": "node test/render-overlay.js 40",
-    "serve": "npx serve ."
+    "test": "node test/shared-volume.cjs && node test/render-overlay.js 40",
+    "serve": "npx serve .",
+    "test:mass": "node test/shared-volume.cjs"
   },
-  "devDependencies": { "@napi-rs/canvas": "^0.1.0" }
+  "devDependencies": {
+    "@napi-rs/canvas": "^0.1.0"
+  }
 }
