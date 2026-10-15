@@ -1,0 +1,12 @@
+{
+  "name": "lan-nienie",
+  "version": "0.3.1",
+  "private": true,
+  "description": "小海捏捏：薄荷蓝透明史莱姆 + 猫爪揉捏的手机小玩具",
+  "scripts": {
+    "check": "node --check src/slime.js",
+    "test": "node test/render-overlay.js 40",
+    "serve": "npx serve ."
+  },
+  "devDependencies": { "@napi-rs/canvas": "^0.1.0" }
+}
