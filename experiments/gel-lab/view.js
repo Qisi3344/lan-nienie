@@ -1,104 +1,176 @@
+/* 小海 gel-lab: all visible gel geometry is reconstructed from material particles. */
 (function(){
  'use strict';
  const canvas=document.getElementById('gel'),ctx=canvas.getContext('2d',{alpha:false});
- const W=640,H=520,sim=new GelPhysics.Gel();
- let dots=false,last=0,acc=0,frames=0,fps=60,fpsStart=0;
+ const W=640,H=430,sim=new GelPhysics.Gel();
+ let showParticles=false,last=0,acc=0,frames=0,fpsStart=0;
  const scale=3,fw=Math.ceil(W/scale),fh=Math.ceil(H/scale);
- const field=new Float32Array(fw*fh),surface=document.createElement('canvas');
+ const field=new Float32Array(fw*fh);
+ const surface=document.createElement('canvas');
  surface.width=fw;surface.height=fh;
  const sctx=surface.getContext('2d'),img=sctx.createImageData(fw,fh);
- const cv=document.getElementById('visc'),ce=document.getElementById('elastic');
- const status=document.getElementById('status');
+ const visc=document.getElementById('visc'),elastic=document.getElementById('elastic'),status=document.getElementById('status');
  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
- const smooth=(a,b,x)=>{let t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t)};
- const radial=17/scale,radiusSq=radial*radial;
+ function smooth(a,b,x){
+   const t=clamp((x-a)/(b-a),0,1);
+   return t*t*(3-2*t);
+ }
+ const radial=25/scale,radSq=radial*radial;
+ const foamIds=[17,48,73,111,168,204,241,278,319,347,386];
  document.getElementById('reset').onclick=()=>sim.reset();
- document.getElementById('dots').onclick=()=>dots=!dots;
- cv.oninput=()=>{sim.viscosity=Number(cv.value)/100;document.getElementById('viscVal').textContent=cv.value+'%'};
- ce.oninput=()=>{sim.elasticity=Number(ce.value)/100;document.getElementById('elasticVal').textContent=ce.value+'%'};
- function pointer(e){const b=canvas.getBoundingClientRect();return [(e.clientX-b.left)*W/b.width,(e.clientY-b.top)*H/b.height]}
+ document.getElementById('dots').onclick=()=>showParticles=!showParticles;
+ visc.oninput=()=>{sim.viscosity=Number(visc.value)/100;document.getElementById('viscVal').textContent=visc.value+'%';};
+ elastic.oninput=()=>{sim.elasticity=Number(elastic.value)/100;document.getElementById('elasticVal').textContent=elastic.value+'%';};
+ function pointer(e){
+   const rect=canvas.getBoundingClientRect();
+   return [(e.clientX-rect.left)*W/rect.width,(e.clientY-rect.top)*H/rect.height];
+ }
  canvas.addEventListener('pointerdown',e=>{
-   const [x,y]=pointer(e);if(sim.beginGrab(e.pointerId,x,y)){
-     e.preventDefault();canvas.setPointerCapture(e.pointerId);
+   const [x,y]=pointer(e);
+   if(sim.beginGrab(e.pointerId,x,y)){
+     e.preventDefault();
+     canvas.setPointerCapture(e.pointerId);
    }
  },{passive:false});
- canvas.addEventListener('pointermove',e=>{const [x,y]=pointer(e);sim.moveGrab(e.pointerId,x,y)});
- for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(type,e=>sim.endGrab(e.pointerId));
+ canvas.addEventListener('pointermove',e=>{
+   const [x,y]=pointer(e);
+   sim.moveGrab(e.pointerId,x,y);
+ },{passive:false});
+ for(const type of ['pointerup','pointercancel','lostpointercapture']){
+   canvas.addEventListener(type,e=>sim.endGrab(e.pointerId));
+ }
+ // Each dye pixel is reconstructed from the *same persistent particles*.
+ // No separately drawn strands, morph paths, or copied top layers.
  function paintField(){
    field.fill(0);
    for(const p of sim.particles){
      const cx=p.x/scale,cy=p.y/scale;
-     const x0=Math.max(0,Math.floor(cx-radial)),x1=Math.min(fw-1,Math.ceil(cx+radial));
-     const y0=Math.max(0,Math.floor(cy-radial)),y1=Math.min(fh-1,Math.ceil(cy+radial));
-     for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
-       const dx=x+0.5-cx,dy=y+0.5-cy,r2=dx*dx+dy*dy;
-       if(r2>=radiusSq)continue;
-       field[y*fw+x]+=Math.exp(-r2/(radiusSq*.24));
+     const x0=Math.max(1,Math.floor(cx-radial)),x1=Math.min(fw-2,Math.ceil(cx+radial));
+     const y0=Math.max(1,Math.floor(cy-radial)),y1=Math.min(fh-2,Math.ceil(cy+radial));
+     for(let y=y0;y<=y1;y++){
+       const dy=y+0.5-cy,dy2=dy*dy,offset=y*fw;
+       for(let x=x0;x<=x1;x++){
+         const dx=x+0.5-cx,r2=dx*dx+dy2;
+         if(r2>=radSq)continue;
+         const t=1-r2/radSq;
+         field[offset+x]+=3.8*t*t*t;
+       }
      }
    }
    const out=img.data;
-   for(let y=1;y<fh-1;y++)for(let x=1;x<fw-1;x++){
-     const k=y*fw+x,o=k*4,d=field[k];
-     const alpha=smooth(0.75,1.65,d),edge=1-smooth(1.1,2.35,d);
-     const grad=(field[k+1]-field[k-1])*.25-(field[k+fw]-field[k-fw])*.18;
-     const tint=Math.min(1,d/5.5);
-     out[o]=Math.round(108+51*edge+22*tint+14*grad);
-     out[o+1]=Math.round(215+27*edge+8*tint+4*grad);
-     out[o+2]=Math.round(206+35*edge+17*tint);
-     out[o+3]=Math.round(245*alpha);
+   for(let y=0;y<fh;y++){
+     for(let x=0;x<fw;x++){
+       const k=y*fw+x,o=k*4;
+       if(x===0||y===0||x===fw-1||y===fh-1){
+         out[o]=out[o+1]=out[o+2]=out[o+3]=0;continue;
+       }
+       const density=field[k];
+       const alpha=smooth(0.63,1.40,density), edge=1-smooth(1.0,3.3,density);
+       const nx=field[k-1]-field[k+1],ny=field[k-fw]-field[k+fw];
+       const light=clamp(0.58+nx*0.23+ny*0.22,0,1);
+       const depth=clamp((density-1.2)/5,0,1);
+       const frost=light*edge;
+       out[o]=Math.round(clamp(72+53*frost+37*depth+12*ny,0,255));
+       out[o+1]=Math.round(clamp(193+40*frost+16*depth+9*ny,0,255));
+       out[o+2]=Math.round(clamp(185+49*frost+25*depth+8*ny,0,255));
+       out[o+3]=Math.round((0.79+depth*0.16)*255*alpha);
+     }
    }
    sctx.putImageData(img,0,0);
  }
- function background(){
+ function paperAndTray(){
    const g=ctx.createLinearGradient(0,0,0,H);
-   g.addColorStop(0,'#f9fbfc');g.addColorStop(0.65,'#f2f9f9');g.addColorStop(1,'#e7f1f1');
+   g.addColorStop(0,'#F9FCFB');g.addColorStop(0.62,'#F0F8F7');g.addColorStop(1,'#E5F1EF');
    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-   ctx.strokeStyle='#dce8e9';ctx.lineWidth=1;
-   for(let i=0;i<10;i++){
-     const x=60+i*62;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x-25,H);ctx.stroke();
+   const halo=ctx.createRadialGradient(322,245,10,322,245,330);
+   halo.addColorStop(0,'rgba(219,252,247,0.60)');halo.addColorStop(1,'rgba(240,252,248,0)');
+   ctx.fillStyle=halo;ctx.fillRect(0,0,W,H);
+   ctx.fillStyle='rgba(55,147,148,0.13)';
+   ctx.beginPath();ctx.ellipse(320,400,254,19,0,0,2*Math.PI);ctx.fill();
+   const glass=ctx.createLinearGradient(0,178,0,410);
+   glass.addColorStop(0,'rgba(255,255,255,.69)');
+   glass.addColorStop(0.25,'rgba(191,230,230,.34)');
+   glass.addColorStop(1,'rgba(138,215,208,.23)');
+   ctx.fillStyle=glass;
+   ctx.beginPath();ctx.roundRect(51,166,538,241,64);ctx.fill();
+   ctx.strokeStyle='rgba(123,194,193,.52)';
+   ctx.lineWidth=6;ctx.stroke();
+   ctx.strokeStyle='rgba(255,255,255,.95)';
+   ctx.lineWidth=2;
+   ctx.beginPath();ctx.roundRect(58,173,524,227,60);ctx.stroke();
+ }
+ function glassFront(){
+   // Front rim overlays the material like the glass wall of a physical tub.
+   const f=ctx.createLinearGradient(0,325,0,410);
+   f.addColorStop(0,'rgba(224,250,248,0)');
+   f.addColorStop(0.68,'rgba(227,248,245,.16)');
+   f.addColorStop(1,'rgba(223,244,241,.53)');
+   ctx.fillStyle=f;
+   ctx.beginPath();ctx.roundRect(56,170,528,232,59);ctx.fill();
+   ctx.strokeStyle='rgba(255,255,255,.8)';
+   ctx.lineWidth=5;
+   ctx.beginPath();ctx.moveTo(69,226);ctx.lineTo(69,355);ctx.stroke();
+   ctx.strokeStyle='rgba(255,255,255,.66)';
+   ctx.lineWidth=3;
+   ctx.beginPath();ctx.moveTo(567,232);ctx.lineTo(567,353);ctx.stroke();
+ }
+ function sparkle(x,y,r){
+   ctx.save();ctx.translate(x,y);
+   ctx.strokeStyle='rgba(255,255,255,.7)';
+   ctx.lineWidth=1.4;ctx.beginPath();
+   ctx.moveTo(-r,0);ctx.quadraticCurveTo(0,0,0,-r*1.6);
+   ctx.quadraticCurveTo(0,0,r,0);
+   ctx.quadraticCurveTo(0,0,0,r*1.6);
+   ctx.quadraticCurveTo(0,0,-r,0);ctx.stroke();
+   ctx.restore();
+ }
+ function materialDecorations(){
+   // A few tiny inclusions follow particle IDs, not the bowl / mouse / overlay.
+   for(let i=13;i<sim.particles.length;i+=17){
+     const p=sim.particles[i];
+     const r=(i%5===0?2.5:1.35);
+     ctx.fillStyle='rgba(255,255,255,.55)';
+     ctx.beginPath();ctx.ellipse(p.x-1,p.y-2,r*1.2,r*.7,-.4,0,2*Math.PI);ctx.fill();
    }
-   // Side section glass tray is visual only; collision floor is in the solver.
-   ctx.fillStyle='rgba(121,197,194,0.10)';
-   ctx.strokeStyle='rgba(160,203,203,0.48)';ctx.lineWidth=7;
-   ctx.beginPath();ctx.roundRect(63,345,514,121,41);ctx.fill();ctx.stroke();
-   ctx.fillStyle='rgba(255,255,255,0.32)';ctx.fillRect(74,372,492,76);
-   ctx.strokeStyle='rgba(255,255,255,0.76)';ctx.lineWidth=4;
-   ctx.beginPath();ctx.moveTo(78,392);ctx.lineTo(78,433);ctx.stroke();
-   ctx.fillStyle='rgba(59,146,142,.06)';ctx.beginPath();ctx.ellipse(319,457,245,23,0,0,2*Math.PI);ctx.fill();
+   for(const id of foamIds){
+     const p=sim.particles[id];if(!p)continue;
+     sparkle(p.x,p.y,2.6+(id%3)*.5);
+   }
  }
  function draw(){
-   background();paintField();
-   ctx.save();ctx.shadowColor='rgba(26,141,151,0.20)';ctx.shadowBlur=13;ctx.shadowOffsetY=7;
+   paperAndTray();paintField();
+   ctx.save();
+   ctx.shadowColor='rgba(41,157,151,.19)';ctx.shadowBlur=9;ctx.shadowOffsetY=5;
    ctx.imageSmoothingEnabled=true;ctx.drawImage(surface,0,0,W,H);ctx.restore();
-   // Fine highlights are located on moving *material points*, not a fake strand.
-   for(let i=7;i<sim.particles.length;i+=21){
-     const p=sim.particles[i];
-     ctx.fillStyle='rgba(255,255,255,0.62)';
-     ctx.beginPath();ctx.arc(p.x-1,p.y-2,1.4,0,7);ctx.fill();
-   }
+   materialDecorations();
+   glassFront();
    for(const grab of sim.grabs.values()){
-     ctx.strokeStyle='rgba(255,255,255,.90)';ctx.lineWidth=2.5;
-     ctx.beginPath();ctx.arc(grab.x,grab.y,15,0,7);ctx.stroke();
-     ctx.strokeStyle='rgba(29,139,145,.27)';ctx.lineWidth=1;
-     ctx.beginPath();ctx.arc(grab.x,grab.y,23,0,7);ctx.stroke();
+     const r=20;
+     ctx.strokeStyle='rgba(255,255,255,.97)';ctx.lineWidth=2;
+     ctx.beginPath();ctx.arc(grab.x,grab.y,r,0,2*Math.PI);ctx.stroke();
+     ctx.strokeStyle='rgba(40,145,144,.40)';ctx.lineWidth=1;
+     ctx.beginPath();ctx.arc(grab.x,grab.y,r+7,0,2*Math.PI);ctx.stroke();
    }
-   if(dots)for(const p of sim.particles){
-     ctx.fillStyle='#237e80';ctx.fillRect(p.x-1,p.y-1,2,2);
+   if(showParticles){
+     for(const p of sim.particles){
+       ctx.fillStyle='#154e55';ctx.beginPath();ctx.arc(p.x,p.y,1.55,0,2*Math.PI);ctx.fill();
+     }
    }
-   ctx.font='12px ui-rounded,system-ui,sans-serif';ctx.fillStyle='#78aaac';
-   ctx.fillText('可拖动的同一批物质粒子 · 非独立拉丝',18,25);
+   ctx.fillStyle='#639999';ctx.font='12px ui-rounded,"PingFang SC",system-ui,sans-serif';
+   ctx.fillText('抓住这团胶体，向上提拉 · 再松开',21,32);
  }
- function frame(now){
+ function frame(t){
    requestAnimationFrame(frame);
-   if(!last)last=now;if(!fpsStart)fpsStart=now;
-   let dt=Math.min(.052,(now-last)/1000);last=now;acc+=dt;
-   let count=0;while(acc>=1/60&&count<3){sim.step(1/60);acc-=1/60;count++;}
-   if(count>=3)acc=0;
+   if(!last)last=t;if(!fpsStart)fpsStart=t;
+   const dt=Math.min(.055,(t-last)/1000);last=t;acc+=dt;
+   let steps=0;
+   while(acc>=1/60&&steps<2){sim.step(1/60);acc-=1/60;steps++;}
+   if(steps>=2)acc=0;
    draw();frames++;
-   if(now-fpsStart>850){
-     fps=Math.round(frames*1000/(now-fpsStart));frames=0;fpsStart=now;
+   if(t-fpsStart>900){
+     const fps=Math.round(frames*1000/(t-fpsStart));frames=0;fpsStart=t;
      const m=sim.metrics();
-     status.textContent='材料 '+m.particles+' 粒 · 弹性连接 '+m.bonds+' · '+fps+' FPS';
+     status.textContent='胶体 '+m.particles+' 粒 · 连接 '+m.bonds+' · '+fps+' FPS';
    }
  }
  requestAnimationFrame(frame);
